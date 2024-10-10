@@ -8,7 +8,6 @@
  */
 
 import MenuBarMenuListItemView from './menubarmenulistitemview.js';
-import type { Editor } from '@ckeditor/ckeditor5-core';
 import type MenuBarMenuView from './menubarmenuview.js';
 import type {
 	default as MenuBarView,
@@ -172,22 +171,18 @@ export const MenuBarBehaviors = {
 
 		menuBarView.on<ObservableChangeEvent<boolean>>( 'change:isOpen', ( _, evt, isOpen ) => {
 			if ( !isOpen ) {
-				menuBarView.isFocusBorderEnabled = false;
+				// Keep the focus border if the menu bar was closed by a keyboard interaction (Esc key).
+				// The user remains in the keyboard navigation mode and can traverse the main categories.
+				// See https://github.com/ckeditor/ckeditor5/issues/16719.
+				if ( !isKeyPressed ) {
+					menuBarView.isFocusBorderEnabled = false;
+				}
 
 				// Reset the flag when the menu bar is closed, menu items tend to intercept `keyup` event
 				// and sometimes, after pressing `enter` on focused item, `isKeyPressed` stuck in `true` state.
 				isKeyPressed = false;
 			}
 		} );
-
-		// After clicking menu bar list item the focus is moved to the newly opened submenu.
-		// We need to enable focus border for the submenu items because after pressing arrow down it will
-		// focus second item instead of first which is not super intuitive.
-		menuBarView.listenTo( menuBarView.element!, 'click', () => {
-			if ( menuBarView.isOpen && menuBarView.element!.matches( ':focus-within' ) ) {
-				menuBarView.isFocusBorderEnabled = true;
-			}
-		}, { useCapture: true } );
 
 		menuBarView.listenTo( menuBarView.element!, 'keydown', () => {
 			isKeyPressed = true;
@@ -255,10 +250,6 @@ export const MenuBarMenuBehaviors = {
 	openOnButtonClick( menuView: MenuBarMenuView ): void {
 		menuView.buttonView.on<ButtonExecuteEvent>( 'execute', () => {
 			menuView.isOpen = true;
-
-			if ( menuView.parentMenuView ) {
-				menuView.panelView.focus();
-			}
 		} );
 	},
 
@@ -268,6 +259,23 @@ export const MenuBarMenuBehaviors = {
 	toggleOnButtonClick( menuView: MenuBarMenuView ): void {
 		menuView.buttonView.on<ButtonExecuteEvent>( 'execute', () => {
 			menuView.isOpen = !menuView.isOpen;
+		} );
+	},
+
+	/**
+	 * Opens the menu and focuses the panel content upon pressing the Enter key.
+	 */
+	openAndFocusOnEnterKeyPress( menuView: MenuBarMenuView ): void {
+		menuView.keystrokes.set( 'enter', ( data, cancel ) => {
+			// Engage only for Enter key press when the button is focused. The panel can contain
+			// other UI components and features that rely on the Enter key press.
+			if ( menuView.focusTracker.focusedElement !== menuView.buttonView.element ) {
+				return;
+			}
+
+			menuView.isOpen = true;
+			menuView.panelView.focus();
+			cancel();
 		} );
 	},
 
